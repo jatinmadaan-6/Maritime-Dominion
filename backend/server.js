@@ -188,6 +188,89 @@ app.post("/add-log", authenticate, (req, res) => {
     }
   );
 });
+// GET /captains
+app.get("/captains", authenticate, (req, res) => {
+  db.query("SELECT * FROM captains", (err, result) => {
+    if (err) return res.status(500).json({ message: "Error fetching captains" });
+    res.json(result);
+  });
+});
+
+// POST /add-captain
+app.post("/add-captain", authenticate, (req, res) => {
+  const { name, license_number, nationality } = req.body;
+  if (!name) return res.status(400).json({ message: "Name is required" });
+  db.query(
+    "INSERT INTO captains (name, license_number, nationality) VALUES (?, ?, ?)",
+    [name, license_number || null, nationality || null],
+    (err, result) => {
+      if (err) return res.status(500).json({ message: "Error adding captain" });
+      res.status(201).json({ message: "Captain added", id: result.insertId });
+    }
+  );
+});
+
+// GET /vessel-passport/:id — joins vessels + captains + logs
+app.get("/vessel-passport/:id", authenticate, (req, res) => {
+  const id = req.params.id;
+
+  const vesselQ = "SELECT * FROM vessels WHERE id = ?";
+  const captainQ = `
+    SELECT c.*, ca.start_date, ca.end_date
+    FROM captain_assignments ca
+    JOIN captains c ON ca.captain_id = c.id
+    WHERE ca.vessel_id = ?
+    ORDER BY ca.start_date DESC
+  `;
+  const logsQ = "SELECT * FROM logs WHERE vessel_id = ? ORDER BY timestamp DESC LIMIT 10";
+
+  db.query(vesselQ, [id], (err, vessels) => {
+    if (err || vessels.length === 0) return res.status(404).json({ message: "Vessel not found" });
+    db.query(captainQ, [id], (err, captains) => {
+      if (err) return res.status(500).json({ message: "Error fetching captains" });
+      db.query(logsQ, [id], (err, logs) => {
+        if (err) return res.status(500).json({ message: "Error fetching logs" });
+        res.json({ vessel: vessels[0], captains, logs });
+      });
+    });
+  });
+});
+
+// POST /assign-captain
+app.post("/assign-captain", authenticate, (req, res) => {
+  const { captain_id, vessel_id, start_date } = req.body;
+  if (!captain_id || !vessel_id || !start_date)
+    return res.status(400).json({ message: "captain_id, vessel_id, start_date required" });
+
+  // Close previous assignment first
+  db.query(
+    "UPDATE captain_assignments SET end_date = ? WHERE vessel_id = ? AND end_date IS NULL",
+    [start_date, vessel_id],
+    (err) => {
+      if (err) return res.status(500).json({ message: "Error closing previous assignment" });
+      db.query(
+        "INSERT INTO captain_assignments (captain_id, vessel_id, start_date, end_date) VALUES (?, ?, ?, NULL)",
+        [captain_id, vessel_id, start_date],
+        (err, result) => {
+          if (err) return res.status(500).json({ message: "Error assigning captain" });
+          res.status(201).json({ message: "Captain assigned", id: result.insertId });
+        }
+      );
+    }
+  );
+});
+
+app.get("/vessel-passport/:id", authenticate, (req, res) => {
+  const id = req.params.id;
+  db.query("SELECT * FROM vessels WHERE id = ?", [id], (err, vessels) => {
+    if (err || vessels.length === 0) return res.status(404).json({ message: "Vessel not found" });
+    db.query(`SELECT c.*, ca.start_date, ca.end_date FROM captain_assignments ca JOIN captains c ON ca.captain_id = c.id WHERE ca.vessel_id = ? ORDER BY ca.start_date DESC`, [id], (err, captains) => {
+      db.query("SELECT * FROM logs WHERE vessel_id = ? ORDER BY timestamp DESC LIMIT 10", [id], (err, logs) => {
+        res.json({ vessel: vessels[0], captains: captains || [], logs: logs || [] });
+      });
+    });
+  });
+});
 
 // ── TEST ROUTE ─────────────────────────────────────────────
 app.get("/test", (req, res) => res.json({ status: "ok", message: "Maritime Dominion API running" }));
