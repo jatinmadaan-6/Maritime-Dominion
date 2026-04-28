@@ -133,7 +133,7 @@ export default function LandingPage({ onGetStarted }) {
         {/* Overlay — deep navy gradient */}
         <div style={{
           position: "absolute", inset: 0, zIndex: 1,
-          background: "linear-gradient(135deg, rgba(0,10,40,0.75) 0%, rgba(0,20,60,0.5) 50%, rgba(0,5,20,0.8) 100%)"
+          background: "linear-gradient(135deg, rgba(0, 23, 43, 0.75) 0%, rgba(0, 32, 60, 0.5) 50%, rgba(0,5,20,0.8) 100%)"
         }} />
 
         {/* Decorative horizontal line */}

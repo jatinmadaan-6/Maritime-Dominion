@@ -154,3 +154,164 @@ INSERT INTO logs (vessel_id, port_id, voyage_id, sulfur_level, waste_amount) VAL
     (1, 1, 1, 0.3, 40),
     (1, 2, 1, 0.8, 70),
     (2, 3, 2, 0.4, 30);
+
+    -- ============================================================
+-- 🌊 MARITIME DOMINION — ADVANCED DBMS EXTENSION LAYER
+-- ============================================================
+-- This section demonstrates:
+-- Procedures, Functions, Cursors, Views, Transactions
+-- Designed to enhance system WITHOUT affecting existing APIs
+-- ============================================================
+
+
+-- ============================================================
+-- 1. STORED PROCEDURE (Business Logic Abstraction)
+-- ============================================================
+
+DELIMITER //
+CREATE PROCEDURE register_vessel_advanced(
+    IN v_name VARCHAR(100),
+    IN v_imo VARCHAR(20),
+    IN v_flag VARCHAR(50),
+    IN v_type VARCHAR(50)
+)
+BEGIN
+    IF v_name IS NULL OR v_imo IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Name and IMO number are required';
+    END IF;
+
+    INSERT INTO vessels(name, imo_number, flag_state, type)
+    VALUES (v_name, v_imo, v_flag, v_type);
+END;
+//
+DELIMITER ;
+
+
+-- ============================================================
+-- 2. FUNCTION (Analytics)
+-- ============================================================
+
+DELIMITER //
+CREATE FUNCTION vessel_risk_score(v_id INT)
+RETURNS INT
+DETERMINISTIC
+BEGIN
+    DECLARE violations INT;
+    DECLARE score INT;
+
+    SELECT COUNT(*) INTO violations
+    FROM logs
+    WHERE vessel_id = v_id AND violation = 1;
+
+    SET score = violations * 10;
+    RETURN score;
+END;
+//
+DELIMITER ;
+
+
+-- ============================================================
+-- 3. CURSOR PROCEDURE (Iteration Logic)
+-- ============================================================
+
+DELIMITER //
+CREATE PROCEDURE audit_violation_report()
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE v_id INT;
+    DECLARE v_name VARCHAR(100);
+
+    DECLARE cur CURSOR FOR
+        SELECT id, name FROM vessels;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    OPEN cur;
+
+    read_loop: LOOP
+        FETCH cur INTO v_id, v_name;
+
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        SELECT v_name AS vessel_name,
+               vessel_risk_score(v_id) AS risk_score;
+    END LOOP;
+
+    CLOSE cur;
+END;
+//
+DELIMITER ;
+
+
+-- ============================================================
+-- 4. ADVANCED VIEW (Executive Dashboard)
+-- ============================================================
+
+CREATE VIEW vessel_compliance_dashboard AS
+SELECT 
+    v.id,
+    v.name,
+    COUNT(l.id) AS total_logs,
+    SUM(l.violation) AS total_violations,
+    AVG(l.sulfur_level) AS avg_sulfur,
+    MAX(l.sulfur_level) AS max_sulfur
+FROM vessels v
+LEFT JOIN logs l ON v.id = l.vessel_id
+GROUP BY v.id;
+
+
+-- ============================================================
+-- 5. ANALYTICAL QUERIES (FOR REPORT DEMONSTRATION)
+-- ============================================================
+
+-- Top risky vessels
+SELECT name, vessel_risk_score(id) AS risk
+FROM vessels
+ORDER BY risk DESC;
+
+-- Vessel + captain + violation overview
+SELECT v.name, c.name AS captain, COUNT(l.id) AS violations
+FROM vessels v
+LEFT JOIN captain_assignments ca ON v.id = ca.vessel_id
+LEFT JOIN captains c ON ca.captain_id = c.id
+LEFT JOIN logs l ON v.id = l.vessel_id AND l.violation = 1
+GROUP BY v.id, c.name;
+
+-- Voyages with port names
+SELECT v.name, p1.name AS start_port, p2.name AS end_port
+FROM voyages vg
+JOIN vessels v ON vg.vessel_id = v.id
+JOIN ports p1 ON vg.start_port = p1.id
+JOIN ports p2 ON vg.end_port = p2.id;
+
+-- High sulfur alerts
+SELECT * FROM logs
+WHERE sulfur_level > 0.5;
+
+-- Active captains
+SELECT c.name, v.name
+FROM captains c
+JOIN captain_assignments ca ON c.id = ca.captain_id
+JOIN vessels v ON ca.vessel_id = v.id
+WHERE ca.end_date IS NULL;
+
+
+-- ============================================================
+-- 6. TRANSACTION MANAGEMENT DEMO
+-- ============================================================
+
+START TRANSACTION;
+
+INSERT INTO logs(vessel_id, sulfur_level, waste_amount)
+VALUES (1, 0.6, 50);
+
+-- If something goes wrong, rollback
+ROLLBACK;
+
+
+-- ============================================================
+-- 🌟 END OF ADVANCED LAYER
+-- ============================================================
